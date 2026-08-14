@@ -4,8 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
-from wecker.sessions import Session, discover_profiles, list_all_sessions, list_sessions
-from wecker.state import LogFingerprint, PokeMemory
+from continuum.sessions import Session, discover_profiles, list_all_sessions, list_sessions
+from continuum.state import LogFingerprint, PokeMemory
 
 AGENTS_OUTPUT = json.dumps(
     [

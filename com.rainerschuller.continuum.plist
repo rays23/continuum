@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.rainerschuller.claude-wecker</string>
+    <string>com.rainerschuller.continuum</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/opt/homebrew/bin/python3</string>
         <string>-m</string>
-        <string>wecker.cli</string>
+        <string>continuum.cli</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/rainerschuller/Code/Private/claude-wecker</string>
+    <string>/Users/rainerschuller/Code/Private/continuum</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -21,7 +21,7 @@
         <key>PATH</key>
         <string>/Users/rainerschuller/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PYTHONPATH</key>
-        <string>/Users/rainerschuller/Code/Private/claude-wecker</string>
+        <string>/Users/rainerschuller/Code/Private/continuum</string>
     </dict>
 
     <key>StartInterval</key>
@@ -31,9 +31,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/rainerschuller/.local/state/claude-wecker/wecker.log</string>
+    <string>/Users/rainerschuller/.local/state/continuum/continuum.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/rainerschuller/.local/state/claude-wecker/wecker.log</string>
+    <string>/Users/rainerschuller/.local/state/continuum/continuum.log</string>
 
     <key>ProcessType</key>
     <string>Background</string>

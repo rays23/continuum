@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from wecker import cli, poke as poke_module
-from wecker.sessions import Session
-from wecker.state import PokeMemory
+from continuum import cli, poke as poke_module
+from continuum.sessions import Session
+from continuum.state import PokeMemory
 
 LIMIT_LINE = json.dumps(
     {

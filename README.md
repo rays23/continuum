@@ -1,7 +1,9 @@
-# claude-wecker
+# continuum
 
-Weckt Claude-Code-Sessions, sobald ihr Rate-Limit-Fenster wieder offen ist.
+Setzt Claude-Code-Sessions fort, sobald ihr Rate-Limit-Fenster wieder offen ist.
 Ohne tmux, ohne PTY-Wrapper, ohne simulierte Tastendrücke.
+
+Der Name kommt von `continue`: genau das eine Wort, das nach dem Limit fehlt.
 
 ## Warum
 
@@ -60,22 +62,22 @@ geschrieben.
 ./install.sh
 ```
 
-Legt den LaunchAgent `com.rainerschuller.claude-wecker` an (Tick alle 600 s,
+Legt den LaunchAgent `com.rainerschuller.continuum` an (Tick alle 600 s,
 überlebt zugeklappten Deckel und geschlossenes Terminal) und den CLI-Wrapper
-`~/.local/bin/claude-wecker`.
+`~/.local/bin/continuum`.
 
 ```bash
-claude-wecker --status     # Zustand aller Sessions aller Profile
-claude-wecker --dry-run    # zeigen, was passieren würde
-claude-wecker --verbose    # ein Tick von Hand
-tail -f ~/.local/state/claude-wecker/wecker.log
+continuum --status     # Zustand aller Sessions aller Profile
+continuum --dry-run    # zeigen, was passieren würde
+continuum --verbose    # ein Tick von Hand
+tail -f ~/.local/state/continuum/continuum.log
 ```
 
 Deinstallieren:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.rainerschuller.claude-wecker
-rm ~/Library/LaunchAgents/com.rainerschuller.claude-wecker.plist ~/.local/bin/claude-wecker
+launchctl bootout gui/$(id -u)/com.rainerschuller.continuum
+rm ~/Library/LaunchAgents/com.rainerschuller.continuum.plist ~/.local/bin/continuum
 ```
 
 ## Grenzen
@@ -93,6 +95,13 @@ rm ~/Library/LaunchAgents/com.rainerschuller.claude-wecker.plist ~/.local/bin/cl
 - **Kein Lock auf der Zustandsdatei.** Überlappen ein Lauf von Hand und ein
   Tick des LaunchAgent, gewinnt der spätere Schreibvorgang. Gleiche Kosten:
   ein doppelter oder ein verpasster Anstoß.
+- **Nur Claude Code.** Der Mechanismus hängt an drei Claude-Code-Eigenheiten:
+  dem Socket unter `cc-socks`, dem JSONL-Feld `isApiErrorMessage` und
+  `claude agents --json`. Codex, Gemini CLI und Pi legen keinen vergleichbaren
+  Kanal an (geprüft am 14.08.2026: in `/tmp` liegt außer `cc-socks` nichts
+  Vergleichbares, Codex hält seinen Zustand in `~/.codex` als SQLite). Für
+  diese Agenten bliebe nur PTY oder Tastendruck-Simulation, also eine andere
+  Bauart.
 - Getestet auf macOS. Der Socket-Pfad respektiert `XDG_RUNTIME_DIR`, Linux
   sollte laufen, ist aber ungeprüft.
 

@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from wecker.detect import LimitState, read_limit_state
+from continuum.detect import LimitState, read_limit_state
 
 LIMIT_TEXT = "You've hit your session limit · resets 7pm (Europe/Berlin)"
 

@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from wecker import detect, poke as poke_module
-from wecker.detect import read_limit_state
-from wecker.poke import is_own_socket, poke
-from wecker.sessions import list_sessions
-from wecker.state import LogFingerprint, PokeMemory
+from continuum import detect, poke as poke_module
+from continuum.detect import read_limit_state
+from continuum.poke import is_own_socket, poke
+from continuum.sessions import list_sessions
+from continuum.state import LogFingerprint, PokeMemory
 from tests.test_sessions_and_state import fake_runner
 
 LIMIT_LINE = json.dumps(

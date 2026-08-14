@@ -1,4 +1,4 @@
-"""claude-wecker: weckt rate-limitierte Claude-Code-Sessions.
+"""continuum: weckt rate-limitierte Claude-Code-Sessions.
 
 Ein Tick prueft alle Sessions aller Config-Profile und stupst jede an, die
 im Rate-Limit haengt und auf Eingaben wartet. Die Reset-Zeit wird bewusst
@@ -13,15 +13,15 @@ import logging
 import sys
 from pathlib import Path
 
-from wecker.detect import read_limit_state
-from wecker.poke import poke, socket_path
-from wecker.sessions import Session, list_all_sessions
-from wecker.state import LogFingerprint, PokeMemory
+from continuum.detect import read_limit_state
+from continuum.poke import poke, socket_path
+from continuum.sessions import Session, list_all_sessions
+from continuum.state import LogFingerprint, PokeMemory
 
 DEFAULT_MESSAGE = "continue"
-STATE_DIR = Path.home() / ".local" / "state" / "claude-wecker"
+STATE_DIR = Path.home() / ".local" / "state" / "continuum"
 
-log = logging.getLogger("claude-wecker")
+log = logging.getLogger("continuum")
 
 
 def run_tick(message: str, dry_run: bool, memory: PokeMemory, sessions=None) -> int:
@@ -78,7 +78,7 @@ def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="claude-wecker",
+        prog="continuum",
         description="Weckt Claude-Code-Sessions, sobald ihr Rate-Limit-Fenster wieder offen ist.",
     )
     parser.add_argument("--message", default=DEFAULT_MESSAGE, help="Text, der zugestellt wird")

@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from wecker import poke as poke_module
-from wecker.poke import build_message, poke, socket_dir, socket_path
+from continuum import poke as poke_module
+from continuum.poke import build_message, poke, socket_dir, socket_path
 
 
 class BuildMessageTest(unittest.TestCase):
