@@ -1,27 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Vorlage. install.sh ersetzt __REPO__, __HOME__ und __PYTHON__ und legt das
+    Ergebnis unter ~/Library/LaunchAgents/dev.continuum.agent.plist ab.
+-->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.rainerschuller.continuum</string>
+    <string>dev.continuum.agent</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/python3</string>
+        <string>__PYTHON__</string>
         <string>-m</string>
         <string>continuum.cli</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/rainerschuller/Code/Private/continuum</string>
+    <string>__REPO__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
-        <!-- launchd startet mit minimalem PATH; claude liegt in ~/.local/bin. -->
+        <!-- launchd startet mit minimalem PATH; claude liegt oft in ~/.local/bin. -->
         <key>PATH</key>
-        <string>/Users/rainerschuller/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PYTHONPATH</key>
-        <string>/Users/rainerschuller/Code/Private/continuum</string>
+        <string>__REPO__</string>
     </dict>
 
     <key>StartInterval</key>
@@ -31,9 +35,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/rainerschuller/.local/state/continuum/continuum.log</string>
+    <string>__HOME__/.local/state/continuum/continuum.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/rainerschuller/.local/state/continuum/continuum.log</string>
+    <string>__HOME__/.local/state/continuum/continuum.log</string>
 
     <key>ProcessType</key>
     <string>Background</string>

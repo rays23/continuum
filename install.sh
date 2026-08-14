@@ -3,24 +3,29 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LABEL="com.rainerschuller.continuum"
+LABEL="dev.continuum.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 BIN="$HOME/.local/bin/continuum"
+PYTHON="${CONTINUUM_PYTHON:-$(command -v python3)}"
+
+if [ -z "$PYTHON" ]; then
+    echo "python3 nicht gefunden. Pfad via CONTINUUM_PYTHON setzen." >&2
+    exit 1
+fi
 
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.local/bin" "$HOME/.local/state/continuum"
 
 cat > "$BIN" <<EOF
 #!/usr/bin/env bash
-# Wrapper: continuum von ueberall aufrufbar.
-exec /opt/homebrew/bin/python3 -m continuum.cli "\$@"
+export PYTHONPATH="$REPO\${PYTHONPATH:+:\$PYTHONPATH}"
+exec "$PYTHON" -m continuum.cli "\$@"
 EOF
 chmod +x "$BIN"
-# Der Wrapper braucht das Repo im Modulpfad.
-sed -i '' "2i\\
-export PYTHONPATH=\"$REPO\${PYTHONPATH:+:\$PYTHONPATH}\"
-" "$BIN"
 
-cp "$REPO/$LABEL.plist" "$PLIST"
+sed -e "s|__REPO__|$REPO|g" \
+    -e "s|__HOME__|$HOME|g" \
+    -e "s|__PYTHON__|$PYTHON|g" \
+    "$REPO/dev.continuum.agent.plist" > "$PLIST"
 
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"

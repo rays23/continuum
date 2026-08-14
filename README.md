@@ -62,7 +62,7 @@ geschrieben.
 ./install.sh
 ```
 
-Legt den LaunchAgent `com.rainerschuller.continuum` an (Tick alle 600 s,
+Legt den LaunchAgent `dev.continuum.agent` an (Tick alle 600 s,
 überlebt zugeklappten Deckel und geschlossenes Terminal) und den CLI-Wrapper
 `~/.local/bin/continuum`.
 
@@ -76,8 +76,8 @@ tail -f ~/.local/state/continuum/continuum.log
 Deinstallieren:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.rainerschuller.continuum
-rm ~/Library/LaunchAgents/com.rainerschuller.continuum.plist ~/.local/bin/continuum
+launchctl bootout gui/$(id -u)/dev.continuum.agent
+rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
 ```
 
 ## Grenzen
@@ -111,13 +111,13 @@ rm ~/Library/LaunchAgents/com.rainerschuller.continuum.plist ~/.local/bin/contin
 python3 -m unittest discover -s tests -t .
 ```
 
-34 Tests, keine Abhängigkeiten außer der Standardbibliothek. Die Zustellung wird
+41 Tests, keine Abhängigkeiten außer der Standardbibliothek. Die Zustellung wird
 gegen einen echten Unix-Domain-Socket getestet, die Limit-Erkennung zusätzlich
 gegen echte Session-Logs im historischen Limit-Zustand.
 
 ### Verifikationsstand (14.08.2026)
 
-Getrennt gehalten, weil es drei verschiedene Aussagen sind:
+Getrennt gehalten, weil es verschiedene Aussagen sind:
 
 1. **Protokoll und Reset-Verhalten**, live gegen eine tatsächlich limitierte
    Session (Reset 19:00), per direktem Socket-Schreiben vor Entstehung des
@@ -127,6 +127,10 @@ Getrennt gehalten, weil es drei verschiedene Aussagen sind:
    echte Sockets, allerdings mit einem Log-Snapshot im historischen
    Limit-Zustand statt einem gerade aktiven Limit. Beide Sessions haben
    geantwortet, der jeweils zweite Tick hat korrekt nicht erneut gestupst.
-3. **Noch ausstehend**: ein unbeaufsichtigter Durchlauf des LaunchAgent durch
-   einen echten Reset. Ebenso ungesehen ist bisher die `LIMITIERT`-Zeile in
-   `--status`, weil seither keine Session limitiert war.
+3. **Der LaunchAgent unbeaufsichtigt**, um 20:32 gegen eine real limitierte
+   Session (Reset 12am): erkannt, angestupst, und die Session lief erneut ins
+   Limit — das vorhergesagte Verhalten eines zu frühen Anstoßes. `--status`
+   zeigte dabei erstmals seine `LIMITIERT`-Zeile gegen echte Daten.
+4. **Noch ausstehend**: derselbe automatische Anstoß nach Ablauf des Fensters,
+   ohne Zutun. Bisher wurde jeder erfolgreiche Anstoß nach einem Reset von Hand
+   ausgelöst.
