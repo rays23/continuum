@@ -1,109 +1,100 @@
 # continuum
 
-Setzt Claude-Code-Sessions fort, sobald ihr Rate-Limit-Fenster wieder offen ist.
-Ohne tmux, ohne PTY-Wrapper, ohne simulierte Tastendrücke.
+Continues Claude Code sessions when their rate limit window opens again.
+No tmux, no PTY wrapper, no simulated keystrokes.
 
-Der Name kommt von `continue`: genau das eine Wort, das nach dem Limit fehlt.
+The name comes from `continue`. That is the one word missing after a limit.
 
-## Warum
+## Why
 
-Claude Code führt eine Session nach dem Limit nicht selbst fort. Der eingebaute
-Handler `prefillRateLimitAutoQueueContinue` schreibt lediglich das Wort
-`continue` in das leere Eingabefeld:
+Claude Code does not resume a session by itself after a rate limit. It puts the
+word `continue` into the empty input box, but you must press Enter. If an
+upgrade dialog appears, even that prefilled word disappears again.
 
-```js
-if (Ut.current && Hy.current === "") { Hy.current = "continue"; EOt("continue") }
-```
+The existing tools (`autoclaude`, `herdr-claude-auto-retry`,
+`claude-auto-continue`, `claude-nightshift`) all need a terminal multiplexer or
+a PTY wrapper, and they send keystrokes. That does not help if you use a
+terminal without tmux. It also does not help for a session that already runs.
 
-Enter musst du selbst drücken. Kommt ein Upsell-Dialog dazwischen, wird der
-Prefill sogar wieder gelöscht (`tengu_rl_checkpoint_auto_continue_cancelled_by_upsell`).
+## How
 
-Die vorhandenen Lösungen (`autoclaude`, `herdr-claude-auto-retry`,
-`claude-auto-continue`, `claude-nightshift`) setzen alle auf einen
-Terminal-Multiplexer oder einen PTY-Wrapper und schicken Tastendrücke. Wer Warp
-ohne tmux fährt oder eine bereits laufende Session wecken will, hat damit nichts
-gewonnen.
-
-## Wie
-
-Claude Code öffnet je Prozess einen Unix-Domain-Socket unter
-`$XDG_RUNTIME_DIR/cc-socks/<pid>.sock` (sonst `/tmp/cc-socks`) und liest dort
-zeilenweise JSON. Das ist derselbe Kanal, über den sich Sessions gegenseitig
-`SendMessage` schicken:
+Claude Code opens one Unix domain socket per process. The socket is at
+`$XDG_RUNTIME_DIR/cc-socks/<pid>.sock`, or `/tmp/cc-socks` if that variable is
+empty. It reads newline-delimited JSON. This is the same channel that sessions
+use to send messages to each other:
 
 ```json
 {"type":"user","priority":"now","message":{"content":"continue"},"session_id":"..."}
 ```
 
-Ein Tick alle 10 Minuten:
+Every 10 minutes, continuum does this:
 
-1. Profile über `~/.claude*/projects/` finden, nicht hartkodieren.
-2. Sessions je Profil über `CLAUDE_CONFIG_DIR=<profil> claude agents --json` lesen.
-   Ohne die Variable sieht man nur das eigene Profil.
-3. Limit erkennen: letzter `assistant`-Eintrag im Session-JSONL hat
-   `isApiErrorMessage: true` und passenden Text.
-4. Nur wecken, wenn die Session auf `idle`/`waiting` steht.
-5. Nachricht in den Socket schreiben, mit `session_id` als Schutz gegen
-   recycelte PIDs.
+1. Find the config profiles under `~/.claude*/projects/`.
+2. Read the sessions of each profile with `CLAUDE_CONFIG_DIR=<profile> claude agents --json`.
+   Without that variable you see only your own profile.
+3. Detect the limit. The last `assistant` entry in the session JSONL has
+   `isApiErrorMessage: true` and matching text.
+4. Skip every session that is not `idle` or `waiting`.
+5. Write the message to the socket. Send the `session_id` with it, because a
+   reused PID must not receive the message.
 
-### Die Reset-Zeit wird bewusst nicht ausgewertet
+### The reset time stays unparsed
 
-Sie steht zwar lesbar in der Fehlermeldung (`resets 7pm (Europe/Berlin)`), ist
-aber lokalisiert, ohne Datum, und die 7-Tage-Varianten rendern anders. Ein
-Parser auf zwei Stichproben greift irgendwann still daneben.
+The error message shows the reset time, for example `resets 7pm (Europe/Berlin)`.
+That time is localized and has no date, and the 7 day limits print a different
+format. A parser built on two samples fails quietly one day.
 
-Gemessen: Ein zu früher Weckversuch kostet exakt eine Zeile im Log. Also pollen
-wir stumpf, bis sich die Session erholt. Die Reset-Zeit wird nur ins Log
-geschrieben.
+A measurement settled this. One early attempt costs exactly one line in the
+session log. So continuum polls until the session recovers. It only writes the
+reset time to its own log.
 
-## Installation
+## Install
 
 ```bash
 ./install.sh
 ```
 
-Legt den LaunchAgent `dev.continuum.agent` an (Tick alle 600 s,
-überlebt zugeklappten Deckel und geschlossenes Terminal) und den CLI-Wrapper
-`~/.local/bin/continuum`.
+This creates the launch agent `dev.continuum.agent` and the CLI wrapper
+`~/.local/bin/continuum`. The agent ticks every 600 seconds. It survives a
+closed lid and a closed terminal.
 
 ```bash
-continuum --status     # Zustand aller Sessions aller Profile
-continuum --dry-run    # zeigen, was passieren würde
-continuum --verbose    # ein Tick von Hand
+continuum --status     # state of all sessions in all profiles
+continuum --dry-run    # show what would happen
+continuum --verbose    # one tick by hand
 tail -f ~/.local/state/continuum/continuum.log
 ```
 
-Deinstallieren:
+To remove it:
 
 ```bash
 launchctl bootout gui/$(id -u)/dev.continuum.agent
 rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
 ```
 
-## Grenzen
+## Limits
 
-- **`crossSessionInbound`**: Steht eine Session auf `hold` oder `refuse`, nimmt
-  sie keine Fremdnachrichten an und ist nicht weckbar. Default (unset) stellt zu.
-- **Beschäftigte Sessions** werden ausgelassen. Eine Nachricht an eine Session
-  im Turn wird eingereiht und landet mitten in ihrer laufenden Arbeit.
-- **Reset-Zeiten sind pro Profil verschieden.** Beobachtet: `6:50pm` im einen,
-  `7pm` im anderen Profil, bei nur 40 Sekunden Abstand der Meldungen. Deshalb
-  wird jedes Profil einzeln bewertet.
-- **Zustellung heißt „in den Socket geschrieben"**, nicht „gelesen". Wäre der
-  Empfangspuffer voll, gälte die Session als gestupst, ohne es zu sein. Kosten
-  im Fehlerfall: ein verpasster Weckzyklus, also maximal 10 Minuten.
-- **Kein Lock auf der Zustandsdatei.** Überlappen ein Lauf von Hand und ein
-  Tick des LaunchAgent, gewinnt der spätere Schreibvorgang. Gleiche Kosten:
-  ein doppelter oder ein verpasster Anstoß.
-- **Nur Claude Code.** Der Mechanismus hängt an drei Claude-Code-Eigenheiten:
-  dem Socket unter `cc-socks`, dem JSONL-Feld `isApiErrorMessage` und
-  `claude agents --json`. Codex, Gemini CLI und Pi legen keinen vergleichbaren
-  Kanal an (geprüft am 14.08.2026: in `/tmp` liegt außer `cc-socks` nichts
-  Vergleichbares, Codex hält seinen Zustand in `~/.codex` als SQLite). Für
-  diese Agenten bliebe nur PTY oder Tastendruck-Simulation, also eine andere
-  Bauart.
-- Getestet auf macOS. Der Socket-Pfad respektiert `XDG_RUNTIME_DIR`, Linux
-  sollte laufen, ist aber ungeprüft.
+- **`crossSessionInbound`**: A session set to `hold` or `refuse` accepts no
+  messages from other sessions. continuum cannot reach it. The default setting
+  delivers the message.
+- **Busy sessions stay untouched.** A message to a session inside a turn waits
+  in the queue and then lands in the middle of its work.
+- **Reset times differ per profile.** One profile reported `6:50pm` and another
+  `7pm`, although both messages appeared 40 seconds apart. So continuum reads
+  the state of each profile on its own.
+- **Delivery means "written to the socket"**, not "read". If the receive buffer
+  were full, continuum would mark the session as poked without it being poked.
+  The cost of that error is one missed cycle, so at most 10 minutes.
+- **The state file has no lock.** If a manual run and an agent tick overlap, the
+  later write wins. The cost is the same: one extra or one missed poke.
+- **Claude Code only.** The mechanism needs three Claude Code specifics: the
+  socket under `cc-socks`, the JSONL field `isApiErrorMessage`, and
+  `claude agents --json`. Codex, Gemini CLI, and Pi open no comparable channel.
+  A check on 2026-08-14 found nothing similar in `/tmp`, and Codex keeps its
+  state in `~/.codex` as SQLite. For those agents only a PTY or keystrokes
+  remain, which is a different design.
+- macOS only so far. The socket path respects `XDG_RUNTIME_DIR`, so Linux
+  should work, but nobody tested it.
 
 ## Tests
 
@@ -111,26 +102,27 @@ rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
 python3 -m unittest discover -s tests -t .
 ```
 
-41 Tests, keine Abhängigkeiten außer der Standardbibliothek. Die Zustellung wird
-gegen einen echten Unix-Domain-Socket getestet, die Limit-Erkennung zusätzlich
-gegen echte Session-Logs im historischen Limit-Zustand.
+41 tests, standard library only. The tests deliver to a real Unix domain socket.
+The limit detection also runs against real session logs in a past limit state.
 
-### Verifikationsstand (14.08.2026)
+### What is verified (2026-08-14)
 
-Getrennt gehalten, weil es verschiedene Aussagen sind:
+These are separate statements, so they stay separate:
 
-1. **Protokoll und Reset-Verhalten**, live gegen eine tatsächlich limitierte
-   Session (Reset 19:00), per direktem Socket-Schreiben vor Entstehung des
-   Tools: Anstoß um 18:55:30 lief erneut ins Limit, Anstoß um 19:00:00 führte
-   30 Sekunden später zur Wiederaufnahme der Arbeit.
-2. **Das Tool von Ende zu Ende**, um 19:13 und 19:18 gegen echte Sessions und
-   echte Sockets, allerdings mit einem Log-Snapshot im historischen
-   Limit-Zustand statt einem gerade aktiven Limit. Beide Sessions haben
-   geantwortet, der jeweils zweite Tick hat korrekt nicht erneut gestupst.
-3. **Der LaunchAgent unbeaufsichtigt**, um 20:32 gegen eine real limitierte
-   Session (Reset 12am): erkannt, angestupst, und die Session lief erneut ins
-   Limit — das vorhergesagte Verhalten eines zu frühen Anstoßes. `--status`
-   zeigte dabei erstmals seine `LIMITIERT`-Zeile gegen echte Daten.
-4. **Noch ausstehend**: derselbe automatische Anstoß nach Ablauf des Fensters,
-   ohne Zutun. Bisher wurde jeder erfolgreiche Anstoß nach einem Reset von Hand
-   ausgelöst.
+1. **Protocol and reset behavior**, live against a session in a real limit
+   (reset 19:00), through a direct socket write before this tool existed. A
+   message at 18:55:30 hit the limit again. A message at 19:00:00 made the
+   session resume its work 30 seconds later.
+2. **The tool end to end**, at 19:13 and 19:18, against real sessions and real
+   sockets. The limit state came from a log snapshot, not from a live limit.
+   Both sessions answered. The second tick correctly sent nothing.
+3. **The launch agent unattended**, at 20:32 against a session in a real limit
+   (reset 12am). It found the session, sent the message, and the session hit the
+   limit again. That is the predicted result of an early attempt. `--status`
+   also showed its `LIMITED` line against real data for the first time.
+4. **Still open**: the same automatic message after the window opens, with
+   nobody watching. Every successful wake after a reset so far started by hand.
+
+## License
+
+MIT

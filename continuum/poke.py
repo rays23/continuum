@@ -56,7 +56,7 @@ def poke(pid: int, text: str, session_id: str | None = None) -> None:
     """Sendet die Nachricht. Wirft OSError, wenn der Socket nicht erreichbar ist."""
     target = socket_path(pid)
     if not is_own_socket(target):
-        raise PermissionError(f"{target} gehoert nicht dem eigenen Benutzer")
+        raise PermissionError(f"{target} is not owned by the current user")
 
     payload = json.dumps(build_message(text, session_id)).encode("utf-8") + b"\n"
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

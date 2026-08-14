@@ -9,7 +9,7 @@ BIN="$HOME/.local/bin/continuum"
 PYTHON="${CONTINUUM_PYTHON:-$(command -v python3)}"
 
 if [ -z "$PYTHON" ]; then
-    echo "python3 nicht gefunden. Pfad via CONTINUUM_PYTHON setzen." >&2
+    echo "python3 not found. Set the path with CONTINUUM_PYTHON." >&2
     exit 1
 fi
 
@@ -30,10 +30,10 @@ sed -e "s|__REPO__|$REPO|g" \
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
-echo "Installiert:"
+echo "Installed:"
 echo "  LaunchAgent  $PLIST  (alle 600 s)"
 echo "  CLI          $BIN"
 echo "  Log          $HOME/.local/state/continuum/continuum.log"
 echo
-echo "Status ansehen:  continuum --status"
-echo "Deinstallieren:  launchctl bootout gui/$(id -u)/$LABEL && rm '$PLIST' '$BIN'"
+echo "Show status:   continuum --status"
+echo "Uninstall:     launchctl bootout gui/$(id -u)/$LABEL && rm '$PLIST' '$BIN'"
