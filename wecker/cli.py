@@ -39,6 +39,10 @@ def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -
     if log_path is None:
         return False
 
+    # Fingerprint VOR dem Lesen nehmen: waechst das Log waehrend der Analyse,
+    # gilt der neue Inhalt als ungesehen und der naechste Tick schaut erneut hin.
+    fingerprint = LogFingerprint.of(log_path)
+
     state = read_limit_state(log_path)
     if not state.is_limited:
         memory.forget(session.session_id)
@@ -49,7 +53,6 @@ def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -
         log.info("%s: limitiert, aber status=%s — nicht angestupst", label, session.status)
         return False
 
-    fingerprint = LogFingerprint.of(log_path)
     if not memory.should_poke(session.session_id, fingerprint):
         log.debug("%s: seit dem letzten Versuch unveraendert", label)
         return False
@@ -88,8 +91,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def print_status() -> int:
     for session in list_all_sessions():
-        log_path = session.log_path
-        state = read_limit_state(log_path) if log_path else None
+        try:
+            log_path = session.log_path
+            state = read_limit_state(log_path) if log_path else None
+        except OSError as error:
+            print(f"{'?':<10} {session.name:<20} pid={session.pid:<7} nicht lesbar: {error}")
+            continue
         limited = "LIMITIERT" if state and state.is_limited else "ok"
         reset = f" reset={state.reset_hint}" if state and state.reset_hint else ""
         socket_note = "" if socket_path(session.pid).exists() else "  [kein Socket]"

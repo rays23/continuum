@@ -20,6 +20,8 @@ from pathlib import Path
 
 # Nur die letzten Bytes lesen; Session-Logs werden schnell mehrere MB gross.
 TAIL_BYTES = 256 * 1024
+# Obergrenze, bis zu der bei Bedarf rueckwaerts weitergesucht wird.
+MAX_SCAN_BYTES = 32 * 1024 * 1024
 
 # Trifft "session limit", "usage limit" und "limit reached" in einer
 # API-Fehlermeldung. Bewusst eng gehalten, damit ein Verbindungsabbruch
@@ -55,27 +57,41 @@ def read_limit_state(path: Path) -> LimitState:
 
 
 def _last_assistant_entry(path: Path) -> dict | None:
-    for line in reversed(_tail_lines(path)):
-        entry = _parse(line)
-        if entry is not None and entry.get("type") == "assistant":
-            return entry
-    return None
+    """Sucht den letzten assistant-Eintrag, notfalls im ganzen Log.
+
+    Nach einem Limit koennen sehr viele system-, queue-operation- und
+    task-notification-Zeilen folgen. Faende man im Tail-Fenster keinen
+    assistant-Eintrag, wuerde die Session faelschlich als "nicht limitiert"
+    gelten, also wird das Fenster dann schrittweise vergroessert.
+    """
+    window = TAIL_BYTES
+    while True:
+        lines, complete = _tail_lines(path, window)
+        for line in reversed(lines):
+            entry = _parse(line)
+            if entry is not None and entry.get("type") == "assistant":
+                return entry
+        if complete or window >= MAX_SCAN_BYTES:
+            return None
+        window *= 4
 
 
-def _tail_lines(path: Path) -> list[str]:
+def _tail_lines(path: Path, window: int) -> tuple[list[str], bool]:
+    """Liest die letzten ``window`` Bytes. Zweiter Wert: ganze Datei gelesen?"""
     try:
         with path.open("rb") as handle:
             handle.seek(0, 2)
-            start = max(0, handle.tell() - TAIL_BYTES)
+            size = handle.tell()
+            start = max(0, size - window)
             handle.seek(start)
             raw = handle.read()
     except OSError:
-        return []
+        return [], True
 
     if start:
         # Angeschnittene erste Zeile verwerfen.
         _, _, raw = raw.partition(b"\n")
-    return raw.decode("utf-8", errors="replace").splitlines()
+    return raw.decode("utf-8", errors="replace").splitlines(), start == 0
 
 
 def _parse(line: str) -> dict | None:

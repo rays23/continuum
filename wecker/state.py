@@ -10,6 +10,7 @@ also loest jeder Versuch genau einen Nachfolger aus statt einer Flut.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,6 +68,12 @@ class PokeMemory:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self._entries, indent=2), encoding="utf-8")
-        temporary.replace(self.path)
+        # Prozesseigener Temp-Name: zwei gleichzeitige Laeufe (LaunchAgent plus
+        # Aufruf von Hand) duerfen sich nicht dieselbe Datei zerschreiben.
+        temporary = self.path.with_suffix(f".{os.getpid()}.tmp")
+        try:
+            temporary.write_text(json.dumps(self._entries, indent=2), encoding="utf-8")
+            temporary.replace(self.path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            raise

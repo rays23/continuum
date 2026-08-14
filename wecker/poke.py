@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import stat
 from pathlib import Path
 
 CONNECT_TIMEOUT_SECONDS = 5
@@ -37,13 +38,31 @@ def build_message(text: str, session_id: str | None = None, priority: str = "now
     return message
 
 
+def is_own_socket(path: Path) -> bool:
+    """Gehoert der Socket dem eigenen Benutzer?
+
+    ``/tmp/cc-socks`` liegt in einem weltweit beschreibbaren Verzeichnis. Auf
+    einem Mehrbenutzersystem koennte dort ein fremder Prozess lauschen. Die
+    Zustellung soll niemandem sonst etwas zuschicken.
+    """
+    try:
+        info = path.stat()
+    except OSError:
+        return False
+    return stat.S_ISSOCK(info.st_mode) and info.st_uid == os.getuid()
+
+
 def poke(pid: int, text: str, session_id: str | None = None) -> None:
     """Sendet die Nachricht. Wirft OSError, wenn der Socket nicht erreichbar ist."""
+    target = socket_path(pid)
+    if not is_own_socket(target):
+        raise PermissionError(f"{target} gehoert nicht dem eigenen Benutzer")
+
     payload = json.dumps(build_message(text, session_id)).encode("utf-8") + b"\n"
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     connection.settimeout(CONNECT_TIMEOUT_SECONDS)
     try:
-        connection.connect(str(socket_path(pid)))
+        connection.connect(str(target))
         connection.sendall(payload)
     finally:
         connection.close()

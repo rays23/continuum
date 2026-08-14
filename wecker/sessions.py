@@ -8,6 +8,7 @@ hartkodiert.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import subprocess
@@ -36,7 +37,11 @@ class Session:
 
     @property
     def log_path(self) -> Path | None:
-        matches = sorted(self.profile.glob(f"projects/*/{self.session_id}.jsonl"))
+        pattern = f"projects/*/{glob.escape(self.session_id)}.jsonl"
+        try:
+            matches = sorted(self.profile.glob(pattern))
+        except OSError:
+            return None
         return matches[0] if matches else None
 
 
@@ -72,6 +77,9 @@ def list_sessions(profile: Path, runner=subprocess.run) -> list[Session]:
     sessions = []
     for entry in entries:
         if not isinstance(entry, dict):
+            continue
+        # Background-Agents haben keinen Socket und duerfen nicht geweckt werden.
+        if entry.get("kind") != "interactive":
             continue
         pid, session_id = entry.get("pid"), entry.get("sessionId")
         if not isinstance(pid, int) or not isinstance(session_id, str):
