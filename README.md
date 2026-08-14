@@ -87,6 +87,12 @@ rm ~/Library/LaunchAgents/com.rainerschuller.claude-wecker.plist ~/.local/bin/cl
 - **Reset-Zeiten sind pro Profil verschieden.** Beobachtet: `6:50pm` im einen,
   `7pm` im anderen Profil, bei nur 40 Sekunden Abstand der Meldungen. Deshalb
   wird jedes Profil einzeln bewertet.
+- **Zustellung heißt „in den Socket geschrieben"**, nicht „gelesen". Wäre der
+  Empfangspuffer voll, gälte die Session als gestupst, ohne es zu sein. Kosten
+  im Fehlerfall: ein verpasster Weckzyklus, also maximal 10 Minuten.
+- **Kein Lock auf der Zustandsdatei.** Überlappen ein Lauf von Hand und ein
+  Tick des LaunchAgent, gewinnt der spätere Schreibvorgang. Gleiche Kosten:
+  ein doppelter oder ein verpasster Anstoß.
 - Getestet auf macOS. Der Socket-Pfad respektiert `XDG_RUNTIME_DIR`, Linux
   sollte laufen, ist aber ungeprüft.
 
@@ -100,6 +106,18 @@ python3 -m unittest discover -s tests -t .
 gegen einen echten Unix-Domain-Socket getestet, die Limit-Erkennung zusätzlich
 gegen echte Session-Logs im historischen Limit-Zustand.
 
-Live verifiziert am 14.08.2026 gegen eine tatsächlich limitierte Session
-(Reset 19:00): Anstoß um 18:55:30 lief erneut ins Limit, Anstoß um 19:00:00
-führte 30 Sekunden später zur Wiederaufnahme der Arbeit.
+### Verifikationsstand (14.08.2026)
+
+Getrennt gehalten, weil es drei verschiedene Aussagen sind:
+
+1. **Protokoll und Reset-Verhalten**, live gegen eine tatsächlich limitierte
+   Session (Reset 19:00), per direktem Socket-Schreiben vor Entstehung des
+   Tools: Anstoß um 18:55:30 lief erneut ins Limit, Anstoß um 19:00:00 führte
+   30 Sekunden später zur Wiederaufnahme der Arbeit.
+2. **Das Tool von Ende zu Ende**, um 19:13 und 19:18 gegen echte Sessions und
+   echte Sockets, allerdings mit einem Log-Snapshot im historischen
+   Limit-Zustand statt einem gerade aktiven Limit. Beide Sessions haben
+   geantwortet, der jeweils zweite Tick hat korrekt nicht erneut gestupst.
+3. **Noch ausstehend**: ein unbeaufsichtigter Durchlauf des LaunchAgent durch
+   einen echten Reset. Ebenso ungesehen ist bisher die `LIMITIERT`-Zeile in
+   `--status`, weil seither keine Session limitiert war.
