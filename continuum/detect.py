@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 # Nur die letzten Bytes lesen; Session-Logs werden schnell mehrere MB gross.
@@ -36,6 +37,9 @@ class LimitState:
     is_limited: bool
     reset_hint: str | None = None
     text: str | None = None
+    # Zeitpunkt des Limit-Eintrags. Die Reset-Uhrzeit in der Meldung hat kein
+    # Datum, also braucht sie diesen Anker, um zu einem Zeitpunkt zu werden.
+    logged_at: datetime | None = None
 
 
 NOT_LIMITED = LimitState(is_limited=False)
@@ -53,7 +57,12 @@ def read_limit_state(path: Path) -> LimitState:
     if not LIMIT_PATTERN.search(text):
         return NOT_LIMITED
 
-    return LimitState(is_limited=True, reset_hint=_reset_hint(text), text=text)
+    return LimitState(
+        is_limited=True,
+        reset_hint=_reset_hint(text),
+        text=text,
+        logged_at=_timestamp(entry.get("timestamp")),
+    )
 
 
 def _last_assistant_entry(path: Path) -> dict | None:
@@ -113,6 +122,15 @@ def _entry_text(entry: dict) -> str:
         parts = [block.get("text", "") for block in content if isinstance(block, dict)]
         return " ".join(part for part in parts if part)
     return ""
+
+
+def _timestamp(raw: object) -> datetime | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _reset_hint(text: str) -> str | None:

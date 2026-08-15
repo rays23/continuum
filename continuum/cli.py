@@ -1,9 +1,12 @@
-"""continuum: weckt rate-limitierte Claude-Code-Sessions.
+"""continuum: setzt rate-limitierte Claude-Code-Sessions fort.
 
 Ein Tick prueft alle Sessions aller Config-Profile und stupst jede an, die
-im Rate-Limit haengt und auf Eingaben wartet. Die Reset-Zeit wird bewusst
-NICHT ausgewertet: Ein zu frueher Versuch kostet nur eine Zeile im Log,
-waehrend das Parsen einer lokalisierten Uhrzeit still danebengreifen kann.
+im Rate-Limit haengt und auf Eingaben wartet.
+
+Ausloeser bleibt das Pollen. Die Reset-Zeit wirkt nur als Bremse, damit sich
+waehrend eines langen Limits keine Nachrichten in der Warteschlange der
+blockierten Session stapeln. Ist sie nicht lesbar, waechst der Abstand
+zwischen den Versuchen stattdessen an.
 """
 
 from __future__ import annotations
@@ -11,12 +14,14 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from continuum.detect import read_limit_state
 from continuum.poke import poke, socket_path
+from continuum.schedule import GRACE, MAX_WAIT, backoff_delay, parse_reset_time
 from continuum.sessions import Session, list_all_sessions
-from continuum.state import LogFingerprint, PokeMemory
+from continuum.state import PokeMemory
 
 DEFAULT_MESSAGE = "continue"
 STATE_DIR = Path.home() / ".local" / "state" / "continuum"
@@ -24,24 +29,29 @@ STATE_DIR = Path.home() / ".local" / "state" / "continuum"
 log = logging.getLogger("continuum")
 
 
-def run_tick(message: str, dry_run: bool, memory: PokeMemory, sessions=None) -> int:
+def run_tick(
+    message: str,
+    dry_run: bool,
+    memory: PokeMemory,
+    sessions=None,
+    now: datetime | None = None,
+) -> int:
+    moment = now or datetime.now().astimezone()
     poked = 0
     for session in list_all_sessions() if sessions is None else sessions:
-        if _handle(session, message, dry_run, memory):
+        if _handle(session, message, dry_run, memory, moment):
             poked += 1
     if not dry_run:
         memory.save()
     return poked
 
 
-def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -> bool:
+def _handle(
+    session: Session, message: str, dry_run: bool, memory: PokeMemory, now: datetime
+) -> bool:
     log_path = session.log_path
     if log_path is None:
         return False
-
-    # Fingerprint VOR dem Lesen nehmen: waechst das Log waehrend der Analyse,
-    # gilt der neue Inhalt als ungesehen und der naechste Tick schaut erneut hin.
-    fingerprint = LogFingerprint.of(log_path)
 
     state = read_limit_state(log_path)
     if not state.is_limited:
@@ -53,8 +63,21 @@ def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -
         log.info("%s: limited, but status=%s, not poked", label, session.status)
         return False
 
-    if not memory.should_poke(session.session_id, fingerprint):
-        log.debug("%s: unchanged since the last attempt", label)
+    plan = memory.plan_for(session.session_id)
+    if not plan.is_due(now):
+        log.debug("%s: next attempt at %s", label, plan.next_attempt)
+        return False
+
+    # Die Reset-Zeit bremst nur. Faellt sie aus, uebernimmt der Backoff.
+    # Anker ist der Zeitpunkt des Limit-Eintrags: "7pm" meint das naechste 19 Uhr
+    # NACH der Meldung, nicht nach jetzt. Sonst schoebe eine laengst abgelaufene
+    # Reset-Zeit sich selbst auf den naechsten Tag.
+    reset_at = parse_reset_time(state.reset_hint, state.logged_at or now)
+    if reset_at is not None and now < reset_at:
+        wait_until = min(reset_at + GRACE, now + MAX_WAIT)
+        if not dry_run:
+            memory.schedule(session.session_id, plan.attempts, wait_until)
+        log.info("%s: waiting for the reset at %s", label, state.reset_hint)
         return False
 
     if dry_run:
@@ -71,8 +94,9 @@ def _handle(session: Session, message: str, dry_run: bool, memory: PokeMemory) -
         log.warning("%s: delivery failed: %s", label, error)
         return False
 
-    memory.record(session.session_id, fingerprint)
-    log.info("%s: poked (reset %s)", label, state.reset_hint or "unknown")
+    attempts = plan.attempts + 1
+    memory.schedule(session.session_id, attempts, now + backoff_delay(attempts))
+    log.info("%s: poked (attempt %d, reset %s)", label, attempts, state.reset_hint or "unknown")
     return True
 
 

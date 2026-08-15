@@ -38,15 +38,26 @@ Every 10 minutes, continuum does this:
 5. Write the message to the socket. Send the `session_id` with it, because a
    reused PID must not receive the message.
 
-### The reset time stays unparsed
+### The reset time brakes, it does not trigger
 
-The error message shows the reset time, for example `resets 7pm (Europe/Berlin)`.
-That time is localized and has no date, and the 7 day limits print a different
-format. A parser built on two samples fails quietly one day.
+The trigger stays the poll. The reset time only decides when continuum stays
+quiet. This split matters, because the time is a weak signal. The message shows
+it as local text without a date, for example `resets 7pm (Europe/Berlin)`, and
+the 7 day limits print a different wording.
 
-A measurement settled this. One early attempt costs exactly one line in the
-session log. So continuum polls until the session recovers. It only writes the
-reset time to its own log.
+So continuum treats it as an optimization:
+
+- It reads the time against the timestamp of the limit entry, not against the
+  current time. `7pm` means the next 19:00 after the message.
+- If the time is readable and still ahead, continuum waits, but never longer
+  than 2 hours. A wrong reading therefore costs a delay, never a deadlock.
+- If the time is not readable, the delay between attempts grows instead:
+  10, 20, 40, 80, then 120 minutes.
+
+The first version polled every 10 minutes with no brake. A four hour limit then
+produced about 20 messages. A blocked session queues them without working on
+them, so all 20 arrived at once after the reset. The brake exists because of
+that.
 
 ## Install
 
@@ -102,7 +113,7 @@ rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
 python3 -m unittest discover -s tests -t .
 ```
 
-41 tests, standard library only. The tests deliver to a real Unix domain socket.
+60 tests, standard library only. The tests deliver to a real Unix domain socket.
 The limit detection also runs against real session logs in a past limit state.
 
 ### What is verified (2026-08-14)
@@ -120,7 +131,12 @@ These are separate statements, so they stay separate:
    (reset 12am). It found the session, sent the message, and the session hit the
    limit again. That is the predicted result of an early attempt. `--status`
    also showed its `LIMITED` line against real data for the first time.
-4. **Still open**: the same automatic message after the window opens, with
+4. **The queue problem**, seen in real use on 2026-08-14. During a limit of
+   about three hours, the first version sent 19 messages to one session. The
+   session queued them and delivered all of them after the reset. The brake
+   described above fixes this. A regression test simulates three hours of ticks
+   and asserts that nothing goes out before the reset.
+5. **Still open**: the same automatic message after the window opens, with
    nobody watching. Every successful wake after a reset so far started by hand.
 
 ## License

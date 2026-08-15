@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -11,7 +12,7 @@ from continuum import detect, poke as poke_module
 from continuum.detect import read_limit_state
 from continuum.poke import is_own_socket, poke
 from continuum.sessions import list_sessions
-from continuum.state import LogFingerprint, PokeMemory
+from continuum.state import PokeMemory
 from tests.test_sessions_and_state import fake_runner
 
 LIMIT_LINE = json.dumps(
@@ -105,7 +106,7 @@ class StateFileTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             state_file = Path(directory) / "poked.json"
             memory = PokeMemory(state_file)
-            memory.record("s", LogFingerprint(size=1, mtime_ns=2))
+            memory.schedule("s", attempts=1, next_attempt=datetime.now(tz=timezone.utc))
             memory.save()
 
             self.assertTrue(state_file.exists())

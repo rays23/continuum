@@ -1,11 +1,12 @@
 import json
 import unittest
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 from continuum.sessions import Session, discover_profiles, list_all_sessions, list_sessions
-from continuum.state import LogFingerprint, PokeMemory
+from continuum.state import Plan, PokeMemory
 
 AGENTS_OUTPUT = json.dumps(
     [
@@ -100,50 +101,60 @@ class LogPathTest(unittest.TestCase):
 
 
 class PokeMemoryTest(unittest.TestCase):
-    def test_pokes_once_per_log_change(self):
-        with TemporaryDirectory() as directory:
-            log = Path(directory) / "s.jsonl"
-            log.write_text("a")
-            memory = PokeMemory(Path(directory) / "state.json")
+    def setUp(self):
+        self._directory = TemporaryDirectory()
+        self.state_file = Path(self._directory.name) / "state.json"
+        self.now = datetime(2026, 8, 14, 20, 0, tzinfo=timezone.utc)
 
-            first = LogFingerprint.of(log)
-            self.assertTrue(memory.should_poke("s", first))
-            memory.record("s", first)
-            self.assertFalse(memory.should_poke("s", first))
+    def tearDown(self):
+        self._directory.cleanup()
 
-            log.write_text("ab" * 100)
-            self.assertTrue(memory.should_poke("s", LogFingerprint.of(log)))
+    def test_unknown_session_is_due_at_once(self):
+        self.assertTrue(PokeMemory(self.state_file).plan_for("s").is_due(self.now))
 
-    def test_forget_allows_poking_again(self):
-        with TemporaryDirectory() as directory:
-            log = Path(directory) / "s.jsonl"
-            log.write_text("a")
-            memory = PokeMemory(Path(directory) / "state.json")
-            fingerprint = LogFingerprint.of(log)
-            memory.record("s", fingerprint)
-            memory.forget("s")
-            self.assertTrue(memory.should_poke("s", fingerprint))
+    def test_a_scheduled_session_is_not_due_before_its_time(self):
+        memory = PokeMemory(self.state_file)
+        memory.schedule("s", attempts=1, next_attempt=self.now + timedelta(minutes=10))
 
-    def test_survives_round_trip_and_broken_state_file(self):
-        with TemporaryDirectory() as directory:
-            state_file = Path(directory) / "state.json"
-            log = Path(directory) / "s.jsonl"
-            log.write_text("a")
-            fingerprint = LogFingerprint.of(log)
+        plan = memory.plan_for("s")
+        self.assertFalse(plan.is_due(self.now))
+        self.assertTrue(plan.is_due(self.now + timedelta(minutes=10)))
+        self.assertEqual(plan.attempts, 1)
 
-            memory = PokeMemory(state_file)
-            memory.record("s", fingerprint)
-            memory.save()
+    def test_schedule_survives_a_round_trip(self):
+        memory = PokeMemory(self.state_file)
+        memory.schedule("s", attempts=2, next_attempt=self.now + timedelta(minutes=20))
+        memory.save()
 
-            self.assertFalse(PokeMemory(state_file).should_poke("s", fingerprint))
+        plan = PokeMemory(self.state_file).plan_for("s")
+        self.assertEqual(plan.attempts, 2)
+        self.assertEqual(plan.next_attempt, self.now + timedelta(minutes=20))
 
-            state_file.write_text("{kaputt")
-            self.assertTrue(PokeMemory(state_file).should_poke("s", fingerprint))
+    def test_forget_makes_the_session_due_again(self):
+        memory = PokeMemory(self.state_file)
+        memory.schedule("s", attempts=3, next_attempt=self.now + timedelta(hours=1))
+        memory.forget("s")
 
-    def test_missing_log_is_never_poked(self):
-        with TemporaryDirectory() as directory:
-            memory = PokeMemory(Path(directory) / "state.json")
-            self.assertFalse(memory.should_poke("s", None))
+        plan = memory.plan_for("s")
+        self.assertTrue(plan.is_due(self.now))
+        self.assertEqual(plan.attempts, 0)
+
+    def test_broken_state_file_is_ignored(self):
+        self.state_file.write_text("{kaputt")
+        self.assertTrue(PokeMemory(self.state_file).plan_for("s").is_due(self.now))
+
+    def test_broken_entry_is_ignored(self):
+        self.state_file.write_text('{"s": {"attempts": "viele", "next_attempt_ts": "bald"}}')
+        plan = PokeMemory(self.state_file).plan_for("s")
+        self.assertEqual(plan, Plan())
+
+    def test_temp_file_is_process_specific_and_removed(self):
+        memory = PokeMemory(self.state_file)
+        memory.schedule("s", attempts=1, next_attempt=self.now)
+        memory.save()
+
+        self.assertTrue(self.state_file.exists())
+        self.assertEqual(list(self.state_file.parent.glob("*.tmp")), [])
 
 
 if __name__ == "__main__":

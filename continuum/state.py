@@ -1,10 +1,9 @@
-"""Merkt sich, in welchem Log-Zustand zuletzt geweckt wurde.
+"""Merkt sich je Session, wann der naechste Anstoss faellig ist.
 
-Ohne dieses Gedaechtnis wuerde jeder Tick dieselbe wartende Session erneut
-anstupsen. Gemerkt wird Groesse und mtime des Session-Logs zum Zeitpunkt des
-Weckversuchs: Erst wenn sich das Log seither veraendert hat, ist ein neuer
-Versuch faellig. Ein Weckversuch selbst erzeugt einen neuen Log-Eintrag,
-also loest jeder Versuch genau einen Nachfolger aus statt einer Flut.
+Frueher merkte sich continuum den Log-Zustand und stiess bei jeder Aenderung
+erneut an. Im Dauerbetrieb ergab das waehrend eines vierstuendigen Limits rund
+zwanzig Anstoesse, die sich in der Warteschlange der blockierten Session
+stapelten. Jetzt zaehlt allein der Zeitplan.
 """
 
 from __future__ import annotations
@@ -12,33 +11,17 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 @dataclass(frozen=True)
-class LogFingerprint:
-    size: int
-    mtime_ns: int
+class Plan:
+    attempts: int = 0
+    next_attempt: datetime | None = None
 
-    @classmethod
-    def of(cls, path: Path) -> "LogFingerprint | None":
-        try:
-            info = path.stat()
-        except OSError:
-            return None
-        return cls(size=info.st_size, mtime_ns=info.st_mtime_ns)
-
-    def as_dict(self) -> dict:
-        return {"size": self.size, "mtime_ns": self.mtime_ns}
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "LogFingerprint | None":
-        if not isinstance(raw, dict):
-            return None
-        size, mtime_ns = raw.get("size"), raw.get("mtime_ns")
-        if not isinstance(size, int) or not isinstance(mtime_ns, int):
-            return None
-        return cls(size=size, mtime_ns=mtime_ns)
+    def is_due(self, now: datetime) -> bool:
+        return self.next_attempt is None or now >= self.next_attempt
 
 
 class PokeMemory:
@@ -53,15 +36,24 @@ class PokeMemory:
             return {}
         return raw if isinstance(raw, dict) else {}
 
-    def should_poke(self, session_id: str, fingerprint: LogFingerprint | None) -> bool:
-        if fingerprint is None:
-            return False
-        return LogFingerprint.from_dict(self._entries.get(session_id)) != fingerprint
+    def plan_for(self, session_id: str) -> Plan:
+        entry = self._entries.get(session_id)
+        if not isinstance(entry, dict):
+            return Plan()
 
-    def record(self, session_id: str, fingerprint: LogFingerprint | None) -> None:
-        if fingerprint is None:
-            return
-        self._entries[session_id] = fingerprint.as_dict()
+        attempts = entry.get("attempts")
+        timestamp = entry.get("next_attempt_ts")
+        return Plan(
+            attempts=attempts if isinstance(attempts, int) and attempts >= 0 else 0,
+            next_attempt=_to_datetime(timestamp),
+        )
+
+    def schedule(self, session_id: str, attempts: int, next_attempt: datetime) -> None:
+        self._entries[session_id] = {
+            "attempts": attempts,
+            "next_attempt_ts": next_attempt.timestamp(),
+            "next_attempt_iso": next_attempt.isoformat(timespec="seconds"),
+        }
 
     def forget(self, session_id: str) -> None:
         self._entries.pop(session_id, None)
@@ -77,3 +69,12 @@ class PokeMemory:
         except OSError:
             temporary.unlink(missing_ok=True)
             raise
+
+
+def _to_datetime(timestamp: object) -> datetime | None:
+    if not isinstance(timestamp, (int, float)):
+        return None
+    try:
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
