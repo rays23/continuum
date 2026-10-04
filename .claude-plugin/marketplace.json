@@ -1,0 +1,24 @@
+{
+  "name": "continuum",
+  "owner": {
+    "name": "RayS23",
+    "url": "https://github.com/rays23"
+  },
+  "metadata": {
+    "description": "Marketplace for continuum, a tool that continues Claude Code sessions after a rate limit."
+  },
+  "plugins": [
+    {
+      "name": "continuum",
+      "source": "./",
+      "description": "Continues Claude Code sessions when their rate limit window opens again. No tmux, no PTY wrapper, no simulated keystrokes.",
+      "version": "0.1.0",
+      "author": {
+        "name": "RayS23",
+        "url": "https://github.com/rays23"
+      },
+      "category": "productivity",
+      "homepage": "https://github.com/rays23/continuum"
+    }
+  ]
+}

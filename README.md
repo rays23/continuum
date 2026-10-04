@@ -61,13 +61,30 @@ that.
 
 ## Install
 
+### As a Claude Code plugin
+
+```
+/plugin marketplace add rays23/continuum
+/plugin install continuum@continuum
+/continuum:install
+```
+
+The last command runs `install.sh`. macOS only.
+
+### From a clone
+
 ```bash
 ./install.sh
 ```
 
-This creates the launch agent `dev.continuum.agent` and the CLI wrapper
-`~/.local/bin/continuum`. The agent ticks every 600 seconds. It survives a
-closed lid and a closed terminal.
+The installer copies the package to `~/.local/share/continuum`. It creates the
+launch agent `dev.continuum.agent` and the CLI wrapper `~/.local/bin/continuum`.
+The agent ticks every 600 seconds. It survives a closed lid and a closed
+terminal.
+
+The agent runs the copy, not the clone or the plugin folder. So you can move
+the clone without breaking the agent. After `git pull` or a plugin update, run
+the installer again (`./install.sh` or `/continuum:install`).
 
 ```bash
 continuum --status     # state of all sessions in all profiles
@@ -76,12 +93,16 @@ continuum --verbose    # one tick by hand
 tail -f ~/.local/state/continuum/continuum.log
 ```
 
-To remove it:
+Inside Claude Code, `/continuum:status` shows the same status.
 
-```bash
-launchctl bootout gui/$(id -u)/dev.continuum.agent
-rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
-```
+### Remove
+
+Run `/continuum:uninstall` or `./uninstall.sh`. This removes the launch agent,
+the CLI wrapper, and the copied package. The log and state stay in
+`~/.local/state/continuum`.
+
+The uninstaller does not remove the plugin itself. Remove the plugin with
+`/plugin`.
 
 ## Limits
 
@@ -113,7 +134,7 @@ rm ~/Library/LaunchAgents/dev.continuum.agent.plist ~/.local/bin/continuum
 python3 -m unittest discover -s tests -t .
 ```
 
-60 tests, standard library only. The tests deliver to a real Unix domain socket.
+74 tests, standard library only. The tests deliver to a real Unix domain socket.
 The limit detection also runs against real session logs in a past limit state.
 
 ### What is verified (2026-08-14)

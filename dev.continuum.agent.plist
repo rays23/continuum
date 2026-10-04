@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Vorlage. install.sh ersetzt __REPO__, __HOME__ und __PYTHON__ und legt das
+    Vorlage. install.sh ersetzt die Platzhalter fuer Paketordner, Home und Python und legt das
     Ergebnis unter ~/Library/LaunchAgents/dev.continuum.agent.plist ab.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -17,7 +17,7 @@
     </array>
 
     <key>WorkingDirectory</key>
-    <string>__REPO__</string>
+    <string>__APP__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -25,7 +25,7 @@
         <key>PATH</key>
         <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PYTHONPATH</key>
-        <string>__REPO__</string>
+        <string>__APP__</string>
     </dict>
 
     <key>StartInterval</key>

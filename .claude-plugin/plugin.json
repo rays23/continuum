@@ -1,0 +1,13 @@
+{
+  "name": "continuum",
+  "version": "0.1.0",
+  "description": "Continues Claude Code sessions when their rate limit window opens again. No tmux, no PTY wrapper, no simulated keystrokes.",
+  "author": {
+    "name": "RayS23",
+    "url": "https://github.com/rays23"
+  },
+  "homepage": "https://github.com/rays23/continuum",
+  "repository": "https://github.com/rays23/continuum",
+  "license": "MIT",
+  "keywords": ["rate-limit", "resume", "sessions", "launchd", "macos"]
+}
